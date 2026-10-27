@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>App de agendamento · Demo</title>
+<meta name="description" content="Teste o app de agendamento do consultório da Dra. Helena Marques direto no navegador.">
+<link rel="icon" href="app/favicon.ico">
+<!-- O GitHub Pages não deixa configurar cabeçalhos; este service worker aplica o COOP/COEP
+     que o SQLite do app precisa no navegador. Na primeira visita ele recarrega a página uma vez. -->
+<script src="coi-serviceworker.js"></script>
+<script>
+  // No celular o app abre em tela cheia, sem a moldura.
+  if (window.crossOriginIsolated && window.matchMedia('(max-width: 760px)').matches) location.replace('app/');
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" crossorigin href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Young+Serif&display=swap">
+<style>
+  :root {
+    --fundo: #EAF1F4; --superficie: #FFFFFF; --tinta: #10233F; --tinta-2: #4B5C73;
+    --marca: #0F766E; --marca-escura: #0B5A54; --destaque: #BFEAE0; --linha: #D3DEE5;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--fundo); color: var(--tinta);
+    font: 16px/1.55 Figtree, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: grid; place-items: center; padding: 24px;
+  }
+  .palco { display: flex; gap: clamp(32px, 6vw, 88px); align-items: center; max-width: 1080px; width: 100%; justify-content: center; }
+  .celular-area { flex: none; display: grid; place-items: center; }
+  .celular {
+    width: 414px; height: 868px; padding: 12px; border-radius: 56px; background: var(--tinta);
+    box-shadow: 0 30px 60px -30px rgba(16, 35, 63, 0.55), inset 0 0 0 2px #2a3f5e;
+    position: relative; transform-origin: center center;
+  }
+  .celular::before {
+    content: ""; position: absolute; top: 22px; left: 50%; translate: -50% 0; width: 110px; height: 30px;
+    border-radius: 20px; background: var(--tinta); z-index: 2;
+  }
+  .tela { width: 390px; height: 844px; border-radius: 44px; overflow: hidden; background: var(--fundo); display: flex; flex-direction: column; }
+  /* Barra de status de enfeite: a ilha fica nela, e o app começa logo abaixo, como no aparelho. */
+  .status { flex: none; height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0 34px; font-weight: 600; font-size: 15px; }
+  .status svg { display: block; }
+  .celular iframe { flex: 1; width: 390px; border: 0; background: var(--fundo); display: block; }
+  .texto { max-width: 420px; }
+  .selo { display: inline-block; background: var(--destaque); color: var(--marca-escura); font-weight: 600; font-size: 13px; padding: 4px 12px; border-radius: 999px; margin: 0 0 14px; }
+  h1 { font: 400 clamp(30px, 3.4vw, 40px)/1.15 "Young Serif", Georgia, serif; margin: 0 0 14px; }
+  .intro { color: var(--tinta-2); margin: 0 0 26px; }
+  ol { list-style: none; padding: 0; margin: 0 0 28px; display: grid; gap: 14px; counter-reset: passo; }
+  li { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; counter-increment: passo; }
+  li::before {
+    content: counter(passo); width: 32px; height: 32px; border-radius: 50%; background: var(--marca); color: #fff;
+    display: grid; place-items: center; font-weight: 600; font-size: 14px;
+  }
+  li b { display: block; }
+  li span { color: var(--tinta-2); font-size: 15px; }
+  .acoes { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  button {
+    font: inherit; font-weight: 600; font-size: 15px; cursor: pointer; border-radius: 999px; padding: 10px 18px;
+    border: 1px solid var(--linha); background: var(--superficie); color: var(--tinta);
+  }
+  button:hover { border-color: var(--marca); color: var(--marca-escura); }
+  button:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
+  .nota { color: var(--tinta-2); font-size: 13px; margin: 18px 0 0; }
+  .nota a { color: var(--marca-escura); }
+  .aviso { display: none; background: var(--superficie); border: 1px solid var(--linha); border-radius: 16px; padding: 18px 20px; max-width: 420px; }
+  body.sem-suporte .palco { display: none; }
+  body.sem-suporte .aviso { display: block; }
+  @media (max-width: 760px) {
+    .palco { flex-direction: column; }
+    .celular-area { display: none; }
+    .texto::after { content: "Abrindo o app…"; display: block; margin-top: 16px; color: var(--marca-escura); font-weight: 600; }
+  }
+</style>
+</head>
+<body>
+<div class="palco">
+  <div class="celular-area" id="celular-area">
+    <div class="celular" id="celular">
+      <div class="tela">
+        <div class="status" aria-hidden="true">
+          <span>9:41</span>
+          <svg width="66" height="12" viewBox="0 0 66 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/><path d="M31 2.2c2.3 0 4.4.9 6 2.4l1.1-1.2A10 10 0 0 0 31 .5a10 10 0 0 0-7.1 2.9l1.1 1.2a8.4 8.4 0 0 1 6-2.4Zm0 3.4c1.4 0 2.7.5 3.6 1.4l1.2-1.2A6.8 6.8 0 0 0 31 3.9c-1.8 0-3.5.7-4.8 1.9L27.4 7c.9-.9 2.2-1.4 3.6-1.4Zm0 3.4c-.5 0-1 .2-1.3.5L31 11l1.3-1.5c-.3-.3-.8-.5-1.3-.5Z"/><rect x="43" y="1" width="20" height="10" rx="3" fill="none" stroke="currentColor" opacity=".45"/><rect x="45" y="3" width="14" height="6" rx="1.5"/><rect x="64" y="4" width="1.6" height="4" rx=".8" opacity=".45"/></svg>
+        </div>
+        <iframe id="app" title="App de agendamento da Dra. Helena Marques" src="about:blank"></iframe>
+      </div>
+    </div>
+  </div>
+  <div class="texto">
+    <p class="selo">Demo interativa</p>
+    <h1>App de agendamento para consultório</h1>
+    <p class="intro">A paciente marca, remarca e cancela consultas pelo celular, e a clínica acompanha a agenda do dia. Teste à vontade: os dados ficam só no seu navegador.</p>
+    <ol>
+      <li><div><b>Marque uma consulta</b><span>Escolha o tratamento, o dia e o horário, e confirme com nome e celular.</span></div></li>
+      <li><div><b>Veja em “Minhas consultas”</b><span>Remarque ou cancele, respeitando a antecedência mínima.</span></div></li>
+      <li><div><b>Entre como a clínica</b><span>Toque em “Sou da clínica” para ver a agenda do dia, marcar faltas e o previsto da semana.</span></div></li>
+    </ol>
+    <div class="acoes">
+      <button type="button" id="recomecar">Recomeçar do zero</button>
+    </div>
+    <p class="nota">Desenvolvido por <a href="https://www.linkedin.com/in/deborah-dalonso-482099138" target="_blank" rel="noopener">Deborah Dalonso</a>. Consultório, nomes e preços fictícios.</p>
+  </div>
+</div>
+<div class="aviso">
+  <b>Seu navegador não abriu a demo.</b>
+  <p>Ela precisa de um navegador atualizado (Chrome, Edge, Firefox ou Safari) fora da janela anônima. Tente recarregar a página.</p>
+</div>
+
+<script>
+(function () {
+  var frame = document.getElementById('app');
+  var celular = document.getElementById('celular');
+
+  // Sem isolamento o SQLite não roda. O service worker recarrega a página uma vez para ativá-lo.
+  if (!window.crossOriginIsolated) {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext) document.body.classList.add('sem-suporte');
+    return;
+  }
+  frame.src = 'app/';
+
+  // O celular encolhe para caber na altura da janela, mas o app continua vendo uma tela de 390 px.
+  function ajustar() {
+    var escala = Math.min(1, (window.innerHeight - 48) / 868, (window.innerWidth - 48) / 414);
+    celular.style.transform = 'scale(' + escala + ')';
+    var area = document.getElementById('celular-area');
+    area.style.width = 414 * escala + 'px';
+    area.style.height = 868 * escala + 'px';
+  }
+  ajustar();
+  window.addEventListener('resize', ajustar);
+
+  // Apaga o banco do navegador (OPFS) e abre o app de novo, com os dados de exemplo.
+  document.getElementById('recomecar').addEventListener('click', function () {
+    var botao = this;
+    botao.disabled = true;
+    frame.src = 'about:blank';
+    setTimeout(async function () {
+      try {
+        var raiz = await navigator.storage.getDirectory();
+        for await (var nome of raiz.keys()) await raiz.removeEntry(nome, { recursive: true });
+      } catch (e) {}
+      frame.src = 'app/';
+      botao.disabled = false;
+    }, 400);
+  });
+})();
+</script>
+<script data-goatcounter="https://deborahdalonso.goatcounter.com/count" async src="count.js"></script>
+</body>
+</html>
